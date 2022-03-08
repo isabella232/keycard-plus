@@ -11,8 +11,7 @@ import javacard.security.KeyBuilder;
 import javacard.security.MessageDigest;
 
 /**
- * Utility methods to work with the SECP256k1 curve. This class is not meant to be instantiated, but its init method
- * must be called during applet installation.
+ * Utility methods to work with the SECP256k1 curve.
  */
 public class SECP256k1 {
   static final byte SECP256K1_FP[] = {
@@ -139,8 +138,6 @@ public class SECP256k1 {
     ecdsaBuf[31] = t;
 
     Util.arrayCopyNonAtomic(hash, hashOff, ecdsaBuf, (short) 64, MessageDigest.LENGTH_SHA_256);
-    short sigLen = SecureBox.runNativeLib((short) 2, null, null, null, null, null, ecdsaBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
-    sigLen += crypto.fixS(out, outOff);
-    return sigLen;
+    return SecureBox.runNativeLib((short) 2, null, null, null, null, null, ecdsaBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
   }
 }
