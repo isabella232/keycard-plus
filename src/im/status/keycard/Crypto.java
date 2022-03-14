@@ -1,5 +1,7 @@
 package im.status.keycard;
 
+import com.nxp.id.jcopx.math.Math;
+
 import javacard.framework.JCSystem;
 import javacard.framework.Util;
 import javacard.security.*;
@@ -85,7 +87,7 @@ public class Crypto {
       return false;
     }
 
-    addm256(output, outOff, data, dataOff, SECP256k1.SECP256K1_R, (short) 0, output, outOff);
+    Math.modularAdd(output, outOff, KEY_SECRET_SIZE, data, dataOff, KEY_SECRET_SIZE, SECP256k1.SECP256K1_R, (short) 0, KEY_SECRET_SIZE);
 
     if (isZero256(output, outOff)) {
       return false;
@@ -176,24 +178,6 @@ public class Crypto {
     
     hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, out, outOff); //TODO: missing checks/loop    
   }
-    
-  /**
-   * Modulo addition of two 256-bit numbers.
-   *
-   * @param a the a operand
-   * @param aOff the offset of the a operand
-   * @param b the b operand
-   * @param bOff the offset of the b operand
-   * @param n the modulo
-   * @param nOff the offset of the modulo
-   * @param out the output buffer
-   * @param outOff the offset in the output buffer
-   */
-  private void addm256(byte[] a, short aOff, byte[] b, short bOff, byte[] n, short nOff, byte[] out, short outOff) {
-    if ((add256(a, aOff, b, bOff, out, outOff) != 0) || (ucmp256(out, outOff, n, nOff) > 0)) {
-      sub256(out, outOff, n, nOff, out, outOff);
-    }
-  }
 
   /**
    * Compares two 256-bit numbers. Returns a positive number if a > b, a negative one if a < b and 0 if a = b.
@@ -236,49 +220,5 @@ public class Crypto {
     }
 
     return isZero;
-  }
-
-  /**
-   * Addition of two 256-bit numbers.
-   *
-   * @param a the a operand
-   * @param aOff the offset of the a operand
-   * @param b the b operand
-   * @param bOff the offset of the b operand
-   * @param out the output buffer
-   * @param outOff the offset in the output buffer
-   * @return the carry of the addition
-   */
-  private short add256(byte[] a, short aOff,  byte[] b, short bOff, byte[] out, short outOff) {
-    short outI = 0;
-    for (short i = 31 ; i >= 0 ; i--) {
-      outI = (short) ((short)(a[(short)(aOff + i)] & 0xFF) + (short)(b[(short)(bOff + i)] & 0xFF) + outI);
-      out[(short)(outOff + i)] = (byte)outI ;
-      outI = (short)(outI >> 8);
-    }
-    return outI;
-  }
-
-  /**
-   * Subtraction of two 256-bit numbers.
-   *
-   * @param a the a operand
-   * @param aOff the offset of the a operand
-   * @param b the b operand
-   * @param bOff the offset of the b operand
-   * @param out the output buffer
-   * @param outOff the offset in the output buffer
-   * @return the carry of the subtraction
-   */
-  private short sub256(byte[] a, short aOff,  byte[] b, short bOff, byte[] out, short outOff) {
-    short outI = 0;
-
-    for (short i = 31 ; i >= 0 ; i--) {
-      outI = (short)  ((short)(a[(short)(aOff + i)] & 0xFF) - (short)(b[(short)(bOff + i)] & 0xFF) - outI);
-      out[(short)(outOff + i)] = (byte)outI ;
-      outI = (short)(((outI >> 8) != 0) ? 1 : 0);
-    }
-
-    return outI;
   }
 }
