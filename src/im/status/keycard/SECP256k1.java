@@ -55,6 +55,7 @@ public class SECP256k1 {
   static final short SECP256K1_KEY_SIZE = 256;
   
   private static final short ECDSABUF_SIZE = (short) 128;
+  private static final short SB_ECDSA = (short) 2;
 
   private KeyAgreement ecPointMultiplier;
   private byte[] ecdsaBuf;
@@ -138,6 +139,6 @@ public class SECP256k1 {
     ecdsaBuf[31] = t;
 
     Util.arrayCopyNonAtomic(hash, hashOff, ecdsaBuf, (short) 64, MessageDigest.LENGTH_SHA_256);
-    return SecureBox.runNativeLib((short) 2, null, null, null, null, null, ecdsaBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
+    return SecureBox.runNativeLib(SB_ECDSA, null, null, null, null, null, ecdsaBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
   }
 }
