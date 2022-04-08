@@ -72,6 +72,9 @@ public class KeycardApplet extends Applet {
   static final byte SIGN_P1_DERIVE_AND_MAKE_CURRENT = 0x02;
   static final byte SIGN_P1_PINLESS = 0x03;
 
+  static final byte SIGN_P2_ECDSA = 0x00;
+  static final byte SIGN_P2_BLS = 0x01;
+
   static final byte EXPORT_KEY_P1_CURRENT = 0x00;
   static final byte EXPORT_KEY_P1_DERIVE = 0x01;
   static final byte EXPORT_KEY_P1_DERIVE_AND_MAKE_CURRENT = 0x02;
@@ -89,6 +92,8 @@ public class KeycardApplet extends Applet {
   static final byte TLV_PUB_KEY = (byte) 0x80;
   static final byte TLV_PRIV_KEY = (byte) 0x81;
   static final byte TLV_CHAIN_CODE = (byte) 0x82;
+
+  static final byte TLV_BLS_SIGNATURE = (byte) 0x80;
 
   static final byte TLV_APPLICATION_STATUS_TEMPLATE = (byte) 0xA3;
   static final byte TLV_INT = (byte) 0x02;
