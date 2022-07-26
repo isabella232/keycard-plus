@@ -219,7 +219,7 @@ public class KeycardApplet extends Applet {
     // If we have no PIN it means we still have to initialize the applet.
     if (pin == null) {
       if (secureChannel == null) {
-        secureChannel = new SecureChannel(PAIRING_MAX_CLIENT_COUNT, crypto, secp256k1);
+        secureChannel = new SecureChannel(PAIRING_MAX_CLIENT_COUNT, crypto);
       }
       processInit(apdu);
       return;
@@ -248,6 +248,9 @@ public class KeycardApplet extends Applet {
         case SecureChannel.INS_UNPAIR:
           unpair(apdu);
           break;
+        case IdentApplet.INS_IDENTIFY_CARD:
+          IdentApplet.identifyCard(apdu, secureChannel, secp256k1, crypto);
+          break;          
         case INS_GET_STATUS:
           getStatus(apdu);
           break;
@@ -364,6 +367,8 @@ public class KeycardApplet extends Applet {
       puk.update(apduBuffer, (short)(ISO7816.OFFSET_CDATA + PIN_LENGTH), PUK_LENGTH);
 
       JCSystem.commitTransaction();
+    } else if (apduBuffer[ISO7816.OFFSET_INS] == IdentApplet.INS_IDENTIFY_CARD) {
+      IdentApplet.identifyCard(apdu, null, secp256k1, crypto);
     } else {
       ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
     }
@@ -686,7 +691,7 @@ public class KeycardApplet extends Applet {
    */
   private void resetKeyStatus() {
     parentPrivateKey.clearKey();
-    secp256k1.setCurveParameters(parentPrivateKey);
+    SECP256k1.setCurveParameters(parentPrivateKey);
     keyPathLen = 0;
   }
 
@@ -1435,16 +1440,16 @@ public class KeycardApplet extends Applet {
    * Set curve parameters to cleared keys
    */
   private void resetCurveParameters() {
-    secp256k1.setCurveParameters(masterPublic);
-    secp256k1.setCurveParameters(masterPrivate);
+    SECP256k1.setCurveParameters(masterPublic);
+    SECP256k1.setCurveParameters(masterPrivate);
 
-    secp256k1.setCurveParameters(parentPublicKey);
-    secp256k1.setCurveParameters(parentPrivateKey);
+    SECP256k1.setCurveParameters(parentPublicKey);
+    SECP256k1.setCurveParameters(parentPrivateKey);
 
-    secp256k1.setCurveParameters(publicKey);
-    secp256k1.setCurveParameters(privateKey);
+    SECP256k1.setCurveParameters(publicKey);
+    SECP256k1.setCurveParameters(privateKey);
 
-    secp256k1.setCurveParameters(pinlessPublicKey);
-    secp256k1.setCurveParameters(pinlessPrivateKey);
+    SECP256k1.setCurveParameters(pinlessPublicKey);
+    SECP256k1.setCurveParameters(pinlessPrivateKey);
   }
 }

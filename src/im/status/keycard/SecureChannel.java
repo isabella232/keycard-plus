@@ -48,7 +48,7 @@ public class SecureChannel {
    * Instantiates a Secure Channel. All memory allocations (except pairing secret) needed for the secure channel are
    * performed here. The keypair used for the EC-DH algorithm is also generated here.
    */
-  public SecureChannel(byte pairingLimit, Crypto crypto, SECP256k1 secp256k1) {
+  public SecureChannel(byte pairingLimit, Crypto crypto) {
     this.crypto = crypto;
 
     scMac = Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
@@ -60,8 +60,8 @@ public class SecureChannel {
     pairingKeys = new byte[(short)(PAIRING_KEY_LENGTH * pairingLimit)];
 
     scKeypair = new KeyPair(KeyPair.ALG_EC_FP, SC_KEY_LENGTH);
-    secp256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
-    secp256k1.setCurveParameters((ECKey) scKeypair.getPublic());
+    SECP256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
+    SECP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
     scKeypair.genKeyPair();
 
     remainingSlots = pairingLimit;

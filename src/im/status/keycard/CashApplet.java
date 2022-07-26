@@ -48,8 +48,8 @@ public class CashApplet extends Applet {
     keypair = new KeyPair(KeyPair.ALG_EC_FP, SECP256k1.SECP256K1_KEY_SIZE);
     publicKey = (ECPublicKey) keypair.getPublic();
     privateKey = (ECPrivateKey) keypair.getPrivate();
-    secp256k1.setCurveParameters(publicKey);
-    secp256k1.setCurveParameters(privateKey);
+    SECP256k1.setCurveParameters(publicKey);
+    SECP256k1.setCurveParameters(privateKey);
     keypair.genKeyPair();
     
     blsPair = new KeyPair(KeyPair.ALG_EC_FP, SECP256k1.BLS_KEY_SIZE);
@@ -86,6 +86,9 @@ public class CashApplet extends Applet {
         case KeycardApplet.INS_SIGN:
           sign(apdu);
           break;
+        case IdentApplet.INS_IDENTIFY_CARD:
+          IdentApplet.identifyCard(apdu, null, secp256k1, crypto);
+          break;          
         default:
           ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
           break;
