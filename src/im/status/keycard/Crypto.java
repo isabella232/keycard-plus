@@ -89,11 +89,7 @@ public class Crypto {
 
     Math.modularAdd(output, outOff, KEY_SECRET_SIZE, data, dataOff, KEY_SECRET_SIZE, SECP256k1.SECP256K1_R, (short) 0, KEY_SECRET_SIZE);
 
-    if (isZero256(output, outOff)) {
-      return false;
-    }
-
-    return true;
+    return !isZero256(output, outOff);
   }
 
   /**
@@ -189,17 +185,22 @@ public class Crypto {
    * @return the comparison result
    */
   private short ucmp256(byte[] a, short aOff, byte[] b, short bOff) {
-    short ai, bi;
+    short gt = 0;
+    short eq = 1;
+    
     for (short i = 0 ; i < 32; i++) {
-      ai = (short)(a[(short)(aOff + i)] & 0x00ff);
-      bi = (short)(b[(short)(bOff + i)] & 0x00ff);
+      short l = (short)(a[(short)(aOff + i)] & 0x00ff);
+      short r = (short)(b[(short)(bOff + i)] & 0x00ff);
+      short d = (short)(r - l);
+      short l_xor_r = (short)(l ^ r);
+      short l_xor_d = (short)(l ^ d);
+      short d_xored = (short)(d ^ (short)(l_xor_r & l_xor_d));
 
-      if (ai != bi) {
-        return (short)(ai - bi);
-      }
+      gt |= (d_xored >>> 15) & eq;
+      eq &= ((short)(l_xor_r - 1) >>> 15);
     }
 
-    return 0;
+    return (short) ((gt + gt + eq) - 1);
   }
 
   /**
@@ -210,15 +211,12 @@ public class Crypto {
    * @return true if a is 0, false otherwise
    */
   private boolean isZero256(byte[] a, short aOff) {
-    boolean isZero = true;
+    byte acc = 0;
 
-    for (short i = 0; i < (byte) 32; i++) {
-      if (a[(short)(aOff + i)] != 0) {
-        isZero = false;
-        break;
-      }
+    for (short i = 0; i < 32; i++) {
+      acc |= a[(short)(aOff + i)];
     }
 
-    return isZero;
+    return acc == 0;
   }
 }
