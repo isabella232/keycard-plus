@@ -155,6 +155,12 @@ public class Crypto {
   }
   
   void rfc6979_256(byte[] hash, short hashOff, byte[] privKey, short privKeyOff, byte[] out, short outOff, short count) {
+    // Layout of rfc6979
+    // +---------------+---------------+---+---------------+---------------+---------------+
+    // |       K       |       V       | C | X (privkey)   | H (message)   |     OUT       |
+    // +---------------+---------------+---+---------------+---------------+---------------+
+    //        32B             32B       1B       32B             32B             32B   
+    
     Util.arrayFillNonAtomic(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, (byte) 0x00);
     Util.arrayFillNonAtomic(rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, (byte) 0x01);    
     Util.arrayCopyNonAtomic(privKey, privKeyOff, rfc6979, RFC6979_X_OFF, KEY_SECRET_SIZE);
