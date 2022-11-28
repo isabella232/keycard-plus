@@ -53,7 +53,7 @@ public class SECP256k1 {
   static final byte SECP256K1_K = (byte)0x01;
 
   static final short SECP256K1_KEY_SIZE = 256;
-  
+ 
   static final byte BLS_FP[] = {
       (byte)0x1a,(byte)0x01,(byte)0x11,(byte)0xea,(byte)0x39,(byte)0x7f,(byte)0xe6,(byte)0x9a,
       (byte)0x4b,(byte)0x1b,(byte)0xa7,(byte)0xb6,(byte)0x43,(byte)0x4b,(byte)0xac,(byte)0xd7,
@@ -135,7 +135,7 @@ public class SECP256k1 {
    *
    * @param key the key where the curve parameters must be set
    */
-  void setCurveParameters(ECKey key) {
+  static void setCurveParameters(ECKey key) {
     key.setA(SECP256K1_A, (short) 0x00, (short) SECP256K1_A.length);
     key.setB(SECP256K1_B, (short) 0x00, (short) SECP256K1_B.length);
     key.setFieldFP(SECP256K1_FP, (short) 0x00, (short) SECP256K1_FP.length);
@@ -204,13 +204,34 @@ public class SECP256k1 {
   
   short ecdsaDeterministicSign(Crypto crypto, ECPrivateKey privateKey, byte[] hash, short hashOff, byte[] out, short outOff) {
     privateKey.getS(sigBuf, (short) 0);
-    crypto.rfc6979_256(hash, hashOff, sigBuf, (short) 0, sigBuf, (short) 96);
-    byte t = sigBuf[31];
-    derivePublicKey(sigBuf, (short) 96, sigBuf, (short) 31);
-    sigBuf[31] = t;
+    
+    short count = 0;
+    short outlen;
+    
+    while(true) {
+      crypto.rfc6979_256(hash, hashOff, sigBuf, (short) 0, sigBuf, (short) 96, count++);
+      
+      if (crypto.isZero256(sigBuf, (short) 96) || crypto.ucmp256(sigBuf, (short) 96, SECP256K1_R, (short) 0) >= 0) {
+        continue;
+      }
+      
+      byte t = sigBuf[31];
+      derivePublicKey(sigBuf, (short) 96, sigBuf, (short) 31);
+      sigBuf[31] = t;
+      
+      if (crypto.isZero256(sigBuf, (short) 32)) {
+        continue;
+      }
+      
+      Util.arrayCopyNonAtomic(hash, hashOff, sigBuf, (short) 64, MessageDigest.LENGTH_SHA_256);
+      outlen = SecureBox.runNativeLib(SB_ECDSA, null, null, null, null, null, sigBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
+      
+      if (outlen > 0) {
+        break;
+      }
+    }
 
-    Util.arrayCopyNonAtomic(hash, hashOff, sigBuf, (short) 64, MessageDigest.LENGTH_SHA_256);
-    return SecureBox.runNativeLib(SB_ECDSA, null, null, null, null, null, sigBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
+    return outlen;
   }
   
   short blsSign(ECPrivateKey privateKey, byte[] hash, short hashOff, byte[] out, short outOff) {

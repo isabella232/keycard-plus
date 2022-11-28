@@ -154,25 +154,35 @@ public class Crypto {
     }
   }
   
-  void rfc6979_256(byte[] hash, short hashOff, byte[] privKey, short privKeyOff, byte[] out, short outOff) {
+  void rfc6979_256(byte[] hash, short hashOff, byte[] privKey, short privKeyOff, byte[] out, short outOff, short count) {
     Util.arrayFillNonAtomic(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, (byte) 0x00);
     Util.arrayFillNonAtomic(rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, (byte) 0x01);    
     Util.arrayCopyNonAtomic(privKey, privKeyOff, rfc6979, RFC6979_X_OFF, KEY_SECRET_SIZE);
-    Util.arrayCopyNonAtomic(hash, hashOff, rfc6979, RFC6979_H_OFF, KEY_SECRET_SIZE); //TODO: missing modulo
-
+    Util.arrayCopyNonAtomic(hash, hashOff, rfc6979, RFC6979_H_OFF, KEY_SECRET_SIZE);
+    Math.modularReduce(rfc6979, RFC6979_H_OFF, KEY_SECRET_SIZE, SECP256k1.SECP256K1_R, (short) 0, KEY_SECRET_SIZE);
+    
     rfc6979[RFC6979_C_OFF] = (byte) 0x00;
     hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, RFC6979_DATA_SIZE, rfc6979, RFC6979_OUT_OFF);
     Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE);
     hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_OUT_OFF);
     Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE);
     
-    rfc6979[RFC6979_C_OFF] = (byte) 0x01;
-    hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, RFC6979_DATA_SIZE, rfc6979, RFC6979_OUT_OFF);
-    Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE);
-    hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_OUT_OFF);
-    Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE);
+    byte c = (byte) 0x01;
+    short dlen = RFC6979_DATA_SIZE;
     
-    hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, out, outOff); //TODO: missing checks/loop    
+    while(count-- >= 0) {
+      rfc6979[RFC6979_C_OFF] = c;
+      hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, dlen, rfc6979, RFC6979_OUT_OFF);
+      Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE);
+      hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_OUT_OFF);
+      Util.arrayCopyNonAtomic(rfc6979, RFC6979_OUT_OFF, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE);
+      
+      hmacSHA256(rfc6979, RFC6979_K_OFF, KEY_SECRET_SIZE, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE, out, outOff);  
+      Util.arrayCopyNonAtomic(out, outOff, rfc6979, RFC6979_V_OFF, KEY_SECRET_SIZE);
+      
+      c = (byte) 0x00;
+      dlen = (short) (KEY_SECRET_SIZE + 1);
+    }   
   }
 
   /**
@@ -184,7 +194,7 @@ public class Crypto {
    * @param bOff the offset of the b operand
    * @return the comparison result
    */
-  private short ucmp256(byte[] a, short aOff, byte[] b, short bOff) {
+   short ucmp256(byte[] a, short aOff, byte[] b, short bOff) {
     short gt = 0;
     short eq = 1;
     
@@ -210,7 +220,7 @@ public class Crypto {
    * @param aOff the offset of the a operand
    * @return true if a is 0, false otherwise
    */
-  private boolean isZero256(byte[] a, short aOff) {
+  boolean isZero256(byte[] a, short aOff) {
     byte acc = 0;
 
     for (short i = 0; i < 32; i++) {
