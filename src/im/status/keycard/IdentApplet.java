@@ -119,7 +119,7 @@ public class IdentApplet extends Applet {
     }
 
     short off = SecureChannel.SC_OUT_OFFSET;
-    apduBuffer[off++] = KeycardApplet.TLV_SIGNATURE_TEMPLATE;
+    apduBuffer[off++] = SECP256k1.TLV_SIGNATURE_TEMPLATE;
     apduBuffer[off++] = (byte) 0x81;
     off++;
     apduBuffer[off++] = TLV_CERT;
@@ -128,7 +128,8 @@ public class IdentApplet extends Applet {
     off += SharedMemory.CERT_LEN;
     
     short outLen = (short)(SharedMemory.CERT_LEN + 5);
-    outLen += secp256k1.ecdsaDeterministicSign(crypto, SharedMemory.idPrivate, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, off);      
+    secp256k1.setSigningKey(SharedMemory.idPrivate);
+    outLen += secp256k1.ecdsaDERSign(crypto, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, off);      
 
     apduBuffer[(short)(SecureChannel.SC_OUT_OFFSET + 2)] = (byte)(outLen - 3);
 

@@ -114,6 +114,16 @@ public class SECP256k1 {
   private static final short BLSBUF_SIZE = (short) 224;
   private static final short SB_BLS = (short) 1;
   private static final short SB_ECDSA = (short) 2;
+  
+  private static final short ECDSA_SK_OFF = (short) 0;
+  private static final short ECDSA_R_OFF = (short) 32;
+  private static final short ECDSA_TMP_R_OFF = (short) ECDSA_R_OFF - 1;
+  private static final short ECDSA_H_OFF = (short) 64;
+  private static final short ECDSA_K_OFF = (short) 96;  
+  
+  static final byte TLV_SIGNATURE_TEMPLATE = (byte) 0xA0;
+  static final byte TLV_RAW_SIGNATURE = (byte) 0x80;
+  static final byte TLV_PUB_KEY = (byte) 0x80;
 
   private KeyAgreement ecPointMultiplier;
   private byte[] sigBuf;
@@ -202,42 +212,117 @@ public class SECP256k1 {
     return ecPointMultiplier.generateSecret(point, pointOff, pointLen, out, outOff);
   }
   
-  short ecdsaDeterministicSign(Crypto crypto, ECPrivateKey privateKey, byte[] hash, short hashOff, byte[] out, short outOff) {
-    privateKey.getS(sigBuf, (short) 0);
+  void setSigningKey(ECPrivateKey privateKey) {
+    if (privateKey.getS(sigBuf, (short) 0) == (short) 48) {
+      Util.arrayCopyNonAtomic(sigBuf, (short) 16, sigBuf, (short) 0, BLS_SK_SIZE);
+    }
+  }
+  
+  void setSigningKey(byte[] privateKey, short off) {
+    Util.arrayCopyNonAtomic(privateKey, off, sigBuf, (short) 0, (short) 32);
+  }
+  
+  short ecdsaLegacySign(Crypto crypto, byte[] hash, short hashOff, byte[] out, short outOff) {
+    out[outOff] = TLV_SIGNATURE_TEMPLATE;
+    out[(short)(outOff + 3)] = TLV_PUB_KEY;
+    out[(short)(outOff + 4)] = Crypto.KEY_PUB_SIZE;
+
+    derivePublicKey(sigBuf, ECDSA_SK_OFF, out, (short) (outOff + 5));
+
+    short outLen = (short) (Crypto.KEY_PUB_SIZE + 5);   
     
+    outLen += ecdsaDERSign(crypto, hash, hashOff, out, (short)(outOff + outLen)); 
+    
+    out[(short)(outOff + 1)] = (byte) 0x81;
+    out[(short)(outOff + 2)] = (byte) (outLen - 3);
+    
+    return outLen;
+  }
+  
+  short ecdsaDERSign(Crypto crypto, byte[] hash, short hashOff, byte[] out, short outOff) {
+    ecdsaDeterministicSign(crypto, hash, hashOff, sigBuf, (short) 0);
+    
+    short i = outOff;    
+
+    byte rlen = 32;
+    byte slen = 32;
+    
+    if ((sigBuf[2] & (byte) 0x80) == (byte) 0x80) {
+      rlen++;
+    }
+
+    if ((sigBuf[34] & (byte) 0x80) == (byte) 0x80) {
+      slen++;
+    }
+
+    out[i++] = (byte) 0x30;
+    out[i++] = (byte) (slen + rlen + 4);
+    out[i++] = (byte) 0x02;  
+    out[i++] = rlen;
+    if (rlen == 33) {
+      out[i++] = 0x00;
+    }
+    Util.arrayCopyNonAtomic(sigBuf, (short) 2, out, i, (short) 32);
+    i += 32;
+    
+    out[i++] = (byte) 0x02;  
+    out[i++] = slen;  
+    if (slen == 33) {
+      out[i++] = 0x00;
+    }
+    Util.arrayCopyNonAtomic(sigBuf, (short) 34, out, i, (short) 32);
+    i += 32;
+    
+    return (short)(i - outOff);
+  }
+  
+  short ecdsaDeterministicSign(Crypto crypto, byte[] hash, short hashOff, byte[] out, short outOff) {    
     short count = 0;
     short outlen;
     
+    outOff += 2;
+    
     while(true) {
-      crypto.rfc6979_256(hash, hashOff, sigBuf, (short) 0, sigBuf, (short) 96, count++);
+      crypto.rfc6979_256(hash, hashOff, sigBuf, ECDSA_SK_OFF, sigBuf, ECDSA_K_OFF, count++);
       
-      if (crypto.isZero256(sigBuf, (short) 96) || crypto.ucmp256(sigBuf, (short) 96, SECP256K1_R, (short) 0) >= 0) {
+      if (crypto.isZero256(sigBuf, ECDSA_K_OFF) || crypto.ucmp256(sigBuf, ECDSA_K_OFF, SECP256K1_R, (short) 0) >= 0) {
         continue;
       }
       
-      byte t = sigBuf[31];
-      derivePublicKey(sigBuf, (short) 96, sigBuf, (short) 31);
-      sigBuf[31] = t;
+      byte t = sigBuf[ECDSA_TMP_R_OFF];
+      derivePublicKey(sigBuf, ECDSA_K_OFF, sigBuf, ECDSA_TMP_R_OFF);
+      sigBuf[ECDSA_TMP_R_OFF] = t;
       
-      if (crypto.isZero256(sigBuf, (short) 32)) {
+      if (crypto.isZero256(sigBuf, ECDSA_R_OFF)) {
         continue;
       }
       
-      Util.arrayCopyNonAtomic(hash, hashOff, sigBuf, (short) 64, MessageDigest.LENGTH_SHA_256);
+      byte recId = (byte) (sigBuf[(short)(ECDSA_R_OFF + 63)] & 1);
+      
+      Util.arrayCopyNonAtomic(hash, hashOff, sigBuf, ECDSA_H_OFF, MessageDigest.LENGTH_SHA_256);
       outlen = SecureBox.runNativeLib(SB_ECDSA, null, null, null, null, null, sigBuf, (short) 0, ECDSABUF_SIZE, out, outOff);
       
       if (outlen > 0) {
+        out[(short) (outOff + outlen - 1)] ^= recId;
+        if (crypto.ucmp256(out, outOff, SECP256K1_R, (short) 0) >= 0) {
+          recId += 2;
+        }
         break;
       }
     }
-
-    return outlen;
+    
+    out[--outOff] = (byte) 65;
+    out[--outOff] = TLV_RAW_SIGNATURE;
+    
+    return (short) (outlen + 2);
   }
   
-  short blsSign(ECPrivateKey privateKey, byte[] hash, short hashOff, byte[] out, short outOff) {
-    privateKey.getS(sigBuf, (short) 0);
-    Util.arrayCopyNonAtomic(sigBuf, (short) 16, sigBuf, (short) 0, BLS_SK_SIZE);
+  short blsSign(byte[] hash, short hashOff, byte[] out, short outOff) {    
     Util.arrayCopyNonAtomic(hash, hashOff, sigBuf, BLS_SK_SIZE, BLS_HASH_SIZE);    
-    return SecureBox.runNativeLib(SB_BLS, null, null, null, null, null, sigBuf, (short) 0, BLSBUF_SIZE, out, outOff);
+    short outlen = SecureBox.runNativeLib(SB_BLS, null, null, null, null, null, sigBuf, (short) 0, BLSBUF_SIZE, out, (short) (outOff + 3));
+    out[outOff] = TLV_RAW_SIGNATURE;
+    out[(short)(outOff+1)] = (byte) 0x81;
+    out[(short)(outOff+2)] = (byte) outlen;
+    return (short) (outlen + 3);
   }  
 }

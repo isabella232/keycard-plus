@@ -109,12 +109,12 @@ public class CashApplet extends Applet {
     apduBuffer[off++] = (byte) 0x81;
     short lenoff = off++;
 
-    apduBuffer[off++] = KeycardApplet.TLV_PUB_KEY;
+    apduBuffer[off++] = SECP256k1.TLV_PUB_KEY;
     short keyLength = publicKey.getW(apduBuffer, (short) (off + 1));
     apduBuffer[off++] = (byte) keyLength;
     off += keyLength;
     
-    apduBuffer[off++] = KeycardApplet.TLV_PUB_KEY;
+    apduBuffer[off++] = SECP256k1.TLV_PUB_KEY;
     keyLength = blsPublic.getW(apduBuffer, (short) (off + 1));
     apduBuffer[off++] = (byte) keyLength;
     off += keyLength;    
@@ -136,28 +136,26 @@ public class CashApplet extends Applet {
   private void sign(APDU apdu) {
     byte[] apduBuffer = apdu.getBuffer();
 
-    short outLen = 3;
-
-    if (apduBuffer[ISO7816.OFFSET_P2] == KeycardApplet.SIGN_P2_ECDSA) {
-      apduBuffer[(short) (SIGN_OUT_OFF + 3)] = KeycardApplet.TLV_PUB_KEY;
-      apduBuffer[(short) (SIGN_OUT_OFF + 4)] = Crypto.KEY_PUB_SIZE;
-  
-      publicKey.getW(apduBuffer, (short) (SIGN_OUT_OFF + 5));
-  
-      outLen += (short) (Crypto.KEY_PUB_SIZE + 2);
-      outLen += secp256k1.ecdsaDeterministicSign(crypto, privateKey, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (SIGN_OUT_OFF + outLen));      
-    } else {
-      outLen += 2;
-      short sigLen = secp256k1.blsSign(blsPrivate, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, (short) (SIGN_OUT_OFF + outLen));
-      apduBuffer[(short) (SIGN_OUT_OFF + 3)] = KeycardApplet.TLV_BLS_SIGNATURE;
-      apduBuffer[(short) (SIGN_OUT_OFF + 4)] = (byte) sigLen;
-      outLen += sigLen;
+    short outLen;
+    
+    switch(apduBuffer[ISO7816.OFFSET_P2]) {
+      case KeycardApplet.SIGN_P2_ECDSA:
+        secp256k1.setSigningKey(privateKey);
+        outLen = secp256k1.ecdsaLegacySign(crypto, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, SIGN_OUT_OFF); 
+        break;
+      case KeycardApplet.SIGN_P2_ECDSA_RAW:
+        secp256k1.setSigningKey(privateKey);
+        outLen = secp256k1.ecdsaDeterministicSign(crypto, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, SIGN_OUT_OFF); 
+        break;
+      case KeycardApplet.SIGN_P2_BLS:
+        secp256k1.setSigningKey(blsPrivate);
+        outLen = secp256k1.blsSign(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, SIGN_OUT_OFF); 
+        break;
+      default:
+        ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+        return;
     }
     
-    apduBuffer[SIGN_OUT_OFF] = KeycardApplet.TLV_SIGNATURE_TEMPLATE;
-    
-    apduBuffer[(short) (SIGN_OUT_OFF + 1)] = (byte) 0x81;
-    apduBuffer[(short) (SIGN_OUT_OFF + 2)] = (byte) (outLen - 3);
     apdu.setOutgoingAndSend(SIGN_OUT_OFF, outLen);
   }
 }

@@ -74,7 +74,8 @@ public class KeycardApplet extends Applet {
   static final byte SIGN_P1_PINLESS = 0x03;
 
   static final byte SIGN_P2_ECDSA = 0x00;
-  static final byte SIGN_P2_BLS = 0x01;
+  static final byte SIGN_P2_ECDSA_RAW = 0x01;
+  static final byte SIGN_P2_BLS = 0x02;
 
   static final byte EXPORT_KEY_P1_CURRENT = 0x00;
   static final byte EXPORT_KEY_P1_DERIVE = 0x01;
@@ -88,15 +89,10 @@ public class KeycardApplet extends Applet {
   static final byte STORE_DATA_P1_NDEF = 0x01;
   static final byte STORE_DATA_P1_CASH = 0x02;
 
-  static final byte TLV_SIGNATURE_TEMPLATE = (byte) 0xA0;
-
   static final byte TLV_KEY_TEMPLATE = (byte) 0xA1;
-  static final byte TLV_PUB_KEY = (byte) 0x80;
   static final byte TLV_PRIV_KEY = (byte) 0x81;
   static final byte TLV_CHAIN_CODE = (byte) 0x82;
-
-  static final byte TLV_BLS_SIGNATURE = (byte) 0x80;
-
+  
   static final byte TLV_APPLICATION_STATUS_TEMPLATE = (byte) 0xA3;
   static final byte TLV_INT = (byte) 0x02;
   static final byte TLV_BOOL = (byte) 0x01;
@@ -318,7 +314,7 @@ public class KeycardApplet extends Applet {
     apdu.setIncomingAndReceive();
 
     if (selectingApplet()) {
-      apduBuffer[0] = TLV_PUB_KEY;
+      apduBuffer[0] = SECP256k1.TLV_PUB_KEY;
       apduBuffer[1] = (byte) secureChannel.copyPublicKey(apduBuffer, (short) 2);
       apdu.setOutgoingAndSend((short) 0, (short)(apduBuffer[1] + 2));
     } else if (apduBuffer[ISO7816.OFFSET_INS] == INS_INIT) {
@@ -422,7 +418,7 @@ public class KeycardApplet extends Applet {
     Util.arrayCopyNonAtomic(uid, (short) 0, apduBuffer, off, UID_LENGTH);
     off += UID_LENGTH;
 
-    apduBuffer[off++] = TLV_PUB_KEY;
+    apduBuffer[off++] = SECP256k1.TLV_PUB_KEY;
     short keyLength = secureChannel.copyPublicKey(apduBuffer, (short) (off + 1));
     apduBuffer[off++] = (byte) keyLength;
     off += keyLength;
@@ -724,7 +720,7 @@ public class KeycardApplet extends Applet {
     short privOffset = (short)(pubOffset + apduBuffer[(short)(pubOffset + 1)] + 2);
     short chainOffset = (short)(privOffset + apduBuffer[(short)(privOffset + 1)] + 2);
 
-    if (apduBuffer[pubOffset] != TLV_PUB_KEY) {
+    if (apduBuffer[pubOffset] != SECP256k1.TLV_PUB_KEY) {
       chainOffset = privOffset;
       privOffset = pubOffset;
       pubOffset = -1;
@@ -1116,20 +1112,21 @@ public class KeycardApplet extends Applet {
     }
 
     doDerive(apduBuffer, MessageDigest.LENGTH_SHA_256);
+    secp256k1.setSigningKey(derivationOutput, (short) 0);
 
-    apduBuffer[SecureChannel.SC_OUT_OFFSET] = TLV_SIGNATURE_TEMPLATE;
-    apduBuffer[(short)(SecureChannel.SC_OUT_OFFSET + 3)] = TLV_PUB_KEY;
-    short outLen = apduBuffer[(short)(SecureChannel.SC_OUT_OFFSET + 4)] = Crypto.KEY_PUB_SIZE;
-
-    secp256k1.derivePublicKey(derivationOutput, (short) 0, apduBuffer, (short) (SecureChannel.SC_OUT_OFFSET + 5));
-
-    outLen += 5;
-    short sigOff = (short) (SecureChannel.SC_OUT_OFFSET + outLen);
-
-    outLen += secp256k1.ecdsaDeterministicSign(crypto, secp256k1.tmpECPrivateKey, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, sigOff);
-
-    apduBuffer[(short)(SecureChannel.SC_OUT_OFFSET + 1)] = (byte) 0x81;
-    apduBuffer[(short)(SecureChannel.SC_OUT_OFFSET + 2)] = (byte) (outLen - 3);
+    short outLen;
+    
+    switch(apduBuffer[ISO7816.OFFSET_P2]) {
+      case KeycardApplet.SIGN_P2_ECDSA:
+        outLen = secp256k1.ecdsaLegacySign(crypto, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, SecureChannel.SC_OUT_OFFSET); 
+        break;
+      case KeycardApplet.SIGN_P2_ECDSA_RAW:
+        outLen = secp256k1.ecdsaDeterministicSign(crypto, apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer, SecureChannel.SC_OUT_OFFSET); 
+        break;
+      default:
+        ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+        return;
+    }    
 
     if (makeCurrent) {
       commitTmpPath();
@@ -1237,7 +1234,7 @@ public class KeycardApplet extends Applet {
     short len;
 
     if (publicOnly) {
-      apduBuffer[off++] = TLV_PUB_KEY;
+      apduBuffer[off++] = SECP256k1.TLV_PUB_KEY;
       off++;
       len = secp256k1.derivePublicKey(derivationOutput, (short) 0, apduBuffer, off);
       apduBuffer[(short) (off - 1)] = (byte) len;
